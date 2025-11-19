@@ -1,17 +1,12 @@
 "use client";
 
-import { useSettings } from "../../hooks/useSettings";
-import { Button } from "../../components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/card";
-import { Input } from "../../components/ui/input";
+import { useSettings } from "@/hooks/useSettings";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
-import { CornerPosition } from "../../utils/processImage";
+import { CornerPosition } from "@/utils/processImage";
 
 export default function SettingsPage() {
   const { settings, updateSettings, isLoaded } = useSettings();
@@ -51,7 +46,7 @@ export default function SettingsPage() {
                     onChange={(e) =>
                       updateSettings({ priceText: e.target.value })
                     }
-                    placeholder="$0.00"
+                    placeholder="1500"
                   />
                 </div>
                 <div>
@@ -103,12 +98,6 @@ export default function SettingsPage() {
                     <option value="bottom-right">Bottom Right</option>
                   </select>
                 </div>
-                <div className="flex items-end">
-                  <p className="text-xs text-slate-400 italic">
-                    Note: You will still need to upload the logo file on the
-                    main page for each session.
-                  </p>
-                </div>
               </div>
             </div>
 
@@ -116,7 +105,7 @@ export default function SettingsPage() {
               <Link href="/">
                 <Button className="w-full">
                   <Save className="w-4 h-4 mr-2" />
-                  Save & Return to Editor
+                  Save & Return
                 </Button>
               </Link>
             </div>

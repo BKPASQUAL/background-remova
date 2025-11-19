@@ -26,15 +26,25 @@ export type CornerPosition =
   | "top-left"
   | "top-right"
   | "bottom-left"
-  | "bottom-right";
+  | "bottom-right"
+  | "custom";
 
 export interface ProcessOptions {
   logoFile?: File | null;
   logoPosition?: CornerPosition;
+  logoScale?: number;
+  logoRotation?: number;
+  logoX?: number;
+  logoY?: number;
+
   priceText?: string;
   pricePosition?: CornerPosition;
-  priceColor?: string; // Hex code for text
-  priceBgColor?: string; // Hex code for background box
+  priceColor?: string;
+  priceBgColor?: string;
+  priceScale?: number;
+  priceRotation?: number;
+  priceX?: number;
+  priceY?: number;
 }
 
 export async function processImage(
@@ -42,11 +52,9 @@ export async function processImage(
   options: ProcessOptions = {}
 ): Promise<Blob> {
   try {
-    // 1. Remove background
     const transparentBlob = await removeBackground(imageFile, config);
     const imageBitmap = await createImageBitmap(transparentBlob);
 
-    // 2. Setup 720x720 Canvas
     const targetSize = 720;
     const canvas = document.createElement("canvas");
     canvas.width = targetSize;
@@ -55,11 +63,11 @@ export async function processImage(
 
     if (!ctx) throw new Error("Could not get canvas context");
 
-    // 3. Fill White Background
+    // Fill White Background
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, targetSize, targetSize);
 
-    // 4. Draw Main Object (Centered with padding)
+    // Draw Product
     const scale = Math.min(
       (targetSize * 0.9) / imageBitmap.width,
       (targetSize * 0.9) / imageBitmap.height
@@ -70,9 +78,21 @@ export async function processImage(
     const y = (targetSize - newHeight) / 2;
     ctx.drawImage(imageBitmap, x, y, newWidth, newHeight);
 
-    // Helper to calculate corner coordinates
+    // Coordinates Helper
     const padding = 40;
-    const getCoords = (w: number, h: number, pos: CornerPosition) => {
+    const getCoords = (
+      w: number,
+      h: number,
+      pos: CornerPosition,
+      customX = 0,
+      customY = 0
+    ) => {
+      if (pos === "custom") {
+        return {
+          x: (customX / 100) * targetSize - w / 2,
+          y: (customY / 100) * targetSize - h / 2,
+        };
+      }
       switch (pos) {
         case "top-left":
           return { x: padding, y: padding };
@@ -87,58 +107,110 @@ export async function processImage(
       }
     };
 
-    // 5. Draw Logo
+    const drawTransform = (
+      drawFn: () => void,
+      cx: number,
+      cy: number,
+      angle: number,
+      scale: number
+    ) => {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate((angle * Math.PI) / 180);
+      ctx.scale(scale, scale);
+      ctx.translate(-cx, -cy);
+      drawFn();
+      ctx.restore();
+    };
+
+    // Draw Logo
     if (options.logoFile) {
       const logoBitmap = await createImageBitmap(options.logoFile);
-      const logoMaxSize = 150;
-      const logoScale = Math.min(
-        logoMaxSize / logoBitmap.width,
-        logoMaxSize / logoBitmap.height
+      const baseSize = 150;
+      const ratio = Math.min(
+        baseSize / logoBitmap.width,
+        baseSize / logoBitmap.height
       );
-      const logoW = logoBitmap.width * logoScale;
-      const logoH = logoBitmap.height * logoScale;
+      const logoW = logoBitmap.width * ratio;
+      const logoH = logoBitmap.height * ratio;
 
-      const pos = getCoords(logoW, logoH, options.logoPosition || "top-right");
-      ctx.drawImage(logoBitmap, pos.x, pos.y, logoW, logoH);
+      const pos = getCoords(
+        logoW,
+        logoH,
+        options.logoPosition || "top-right",
+        options.logoX,
+        options.logoY
+      );
+      const cx = pos.x + logoW / 2;
+      const cy = pos.y + logoH / 2;
+
+      drawTransform(
+        () => {
+          ctx.drawImage(logoBitmap, pos.x, pos.y, logoW, logoH);
+        },
+        cx,
+        cy,
+        options.logoRotation || 0,
+        options.logoScale || 1
+      );
     }
 
-    // 6. Draw Price Tag
+    // Draw Price
     if (options.priceText) {
-      // Format Price Logic: Enforce "Rs XXXX/=" format
       let displayText = options.priceText.trim();
-
-      // Remove existing non-numeric chars to normalize first (optional, but safer)
       const numericValue = displayText.replace(/[^0-9.]/g, "");
 
-      if (numericValue) {
+      // Format as Rs XXXX/=
+      if (numericValue && !displayText.toLowerCase().includes("rs")) {
         displayText = `Rs ${numericValue}/=`;
+      } else if (
+        displayText.toLowerCase().startsWith("rs") &&
+        !displayText.endsWith("/=")
+      ) {
+        displayText += "/=";
       }
 
-      // Font settings
       const fontSize = 56;
       ctx.font = `bold ${fontSize}px sans-serif`;
       const metrics = ctx.measureText(displayText);
 
-      // Background Box dimensions
       const bgPadding = 16;
       const bgW = metrics.width + bgPadding * 2;
-      const bgH = fontSize + bgPadding * 2; // Approximation
+      const bgH = fontSize + bgPadding * 2;
 
-      const pos = getCoords(bgW, bgH, options.pricePosition || "bottom-right");
+      const pos = getCoords(
+        bgW,
+        bgH,
+        options.pricePosition || "bottom-right",
+        options.priceX,
+        options.priceY
+      );
+      const cx = pos.x + bgW / 2;
+      const cy = pos.y + bgH / 2;
 
-      // Draw Background Box (Use custom color or default Red)
-      ctx.fillStyle = options.priceBgColor || "#E11D48";
-      ctx.beginPath();
-      ctx.roundRect(pos.x, pos.y, bgW, bgH, 12);
-      ctx.fill();
+      drawTransform(
+        () => {
+          ctx.shadowColor = "rgba(0,0,0,0.3)";
+          ctx.shadowBlur = 10;
+          ctx.shadowOffsetY = 5;
 
-      // Draw Text (Use custom color or default White)
-      ctx.fillStyle = options.priceColor || "#FFFFFF";
-      ctx.textBaseline = "top";
-      ctx.fillText(displayText, pos.x + bgPadding, pos.y + bgPadding + 4);
+          ctx.fillStyle = options.priceBgColor || "#E11D48";
+          ctx.beginPath();
+          ctx.roundRect(pos.x, pos.y, bgW, bgH, 12);
+          ctx.fill();
+
+          ctx.shadowColor = "transparent";
+          ctx.fillStyle = options.priceColor || "#FFFFFF";
+          ctx.textBaseline = "top";
+          ctx.fillText(displayText, pos.x + bgPadding, pos.y + bgPadding + 4);
+        },
+        cx,
+        cy,
+        options.priceRotation || 0,
+        options.priceScale || 1
+      );
     }
 
-    // 7. Export final composite
     return new Promise((resolve, reject) => {
       canvas.toBlob(
         (blob) => {
@@ -150,7 +222,7 @@ export async function processImage(
       );
     });
   } catch (error) {
-    console.warn("Advanced processing failed, falling back...", error);
+    console.warn("Advanced processing failed...", error);
     return await removeBackground(imageFile);
   }
 }
