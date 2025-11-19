@@ -31,53 +31,50 @@ export default function Home() {
   const [originalFile, setOriginalFile] = useState<File | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
 
-  // --- Settings (Initialized from global settings) ---
+  // --- Settings ---
   const [priceText, setPriceText] = useState<string>("");
   const [logoPos, setLogoPos] = useState<CornerPosition>("top-right");
   const [pricePos, setPricePos] = useState<CornerPosition>("bottom-right");
+
+  // --- NEW: Colors ---
+  const [priceColor, setPriceColor] = useState<string>("#FFFFFF"); // Default White Text
+  const [priceBgColor, setPriceBgColor] = useState<string>("#E11D48"); // Default Red Bg
 
   // --- Previews ---
   const [originalPreview, setOriginalPreview] = useState<string | null>(null);
   const [processedPreview, setProcessedPreview] = useState<string | null>(null);
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
 
-  // Refs for file inputs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Load AI Model on Mount
   useEffect(() => {
     preloadModel();
   }, []);
 
-  // 2. Apply Default Settings when Loaded
+  // Load defaults from Settings
   useEffect(() => {
     if (isLoaded) {
-      console.log("Loading settings:", settings);
       setPriceText(settings.priceText || "");
       setLogoPos(settings.logoPosition || "top-right");
       setPricePos(settings.pricePosition || "bottom-right");
     }
   }, [isLoaded, settings]);
 
-  // --- HANDLERS ---
-
   const handleMainImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
       const file = e.target.files[0];
       setOriginalFile(file);
       setOriginalPreview(URL.createObjectURL(file));
-      setProcessedPreview(null); // Reset result
+      setProcessedPreview(null);
       setProcessedBlob(null);
     }
   };
 
   const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
-      const file = e.target.files[0];
-      setLogoFile(file);
-      toast.success("Logo uploaded successfully!");
-      console.log("Logo selected:", file.name);
+      setLogoFile(e.target.files[0]);
+      toast.success("Logo uploaded!");
     }
   };
 
@@ -89,25 +86,20 @@ export default function Home() {
 
     setLoading(true);
     try {
-      console.log("Processing with options:", {
-        logoFile: logoFile ? logoFile.name : "None",
-        logoPosition: logoPos,
-        priceText: priceText,
-        pricePosition: pricePos,
-      });
-
+      // Generate image with ALL options including new colors
       const finalBlob = await processImage(originalFile, {
         logoFile,
         logoPosition: logoPos,
         priceText,
         pricePosition: pricePos,
+        priceColor,
+        priceBgColor,
       });
 
       const finalUrl = URL.createObjectURL(finalBlob);
       setProcessedPreview(finalUrl);
       setProcessedBlob(finalBlob);
 
-      // 2. Upload to Supabase (Optional)
       if (supabase) {
         const fileName = `post-${Date.now()}.jpg`;
         const { data: storageData, error: uploadError } = await supabase.storage
@@ -122,21 +114,19 @@ export default function Home() {
             {
               image_path: storageData.path,
               price_text: priceText,
-              settings: { logoPos, pricePos }, // Save settings used
+              settings: { logoPos, pricePos, priceColor, priceBgColor },
             },
           ]);
-          console.log("Saved to Supabase database.");
           toast.success("Image generated & saved!");
         } else {
-          console.warn("Upload failed, but local preview works.", uploadError);
-          toast.warning("Could not save to cloud, but you can still download.");
+          console.warn("Upload failed, but local preview works.");
         }
       } else {
-        toast.success("Image generated (Local only)");
+        toast.success("Image generated (Local)");
       }
     } catch (error) {
       console.error("Processing failed:", error);
-      toast.error("Something went wrong during processing.");
+      toast.error("Error processing image.");
     } finally {
       setLoading(false);
     }
@@ -213,7 +203,6 @@ export default function Home() {
                   </div>
                 )}
               </div>
-              {/* Hidden Input */}
               <Input
                 ref={fileInputRef}
                 type="file"
@@ -225,7 +214,7 @@ export default function Home() {
 
             <div className="h-px bg-slate-100" />
 
-            {/* 2. Configuration */}
+            {/* 2. Customize */}
             <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-semibold text-slate-900">
@@ -263,8 +252,8 @@ export default function Home() {
                 />
               </div>
 
-              {/* Price Input */}
-              <div className="space-y-2">
+              {/* Price Input Section */}
+              <div className="space-y-3">
                 <span className="text-xs font-medium text-slate-500 uppercase">
                   Price Tag
                 </span>
@@ -272,20 +261,56 @@ export default function Home() {
                   <Input
                     value={priceText}
                     onChange={(e) => setPriceText(e.target.value)}
-                    placeholder="$0.00"
+                    placeholder="1500"
                     className="font-medium"
                   />
                 </div>
+
+                {/* --- NEW: Color Pickers --- */}
+                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-2 rounded-md border border-slate-100">
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">
+                      Text Color
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={priceColor}
+                        onChange={(e) => setPriceColor(e.target.value)}
+                        className="h-6 w-6 rounded cursor-pointer border border-slate-300 p-0 bg-transparent"
+                      />
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {priceColor}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">
+                      Bg Color
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={priceBgColor}
+                        onChange={(e) => setPriceBgColor(e.target.value)}
+                        className="h-6 w-6 rounded cursor-pointer border border-slate-300 p-0 bg-transparent"
+                      />
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {priceBgColor}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Quick Position Toggles */}
+              {/* Positions */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-slate-400 block mb-1">
+                  <label className="text-[10px] text-slate-400 block mb-1 uppercase">
                     Price Pos
                   </label>
                   <select
-                    className="w-full text-xs border rounded p-1"
+                    className="w-full text-xs border border-slate-200 rounded p-1.5 bg-white text-slate-700"
                     value={pricePos}
                     onChange={(e) =>
                       setPricePos(e.target.value as CornerPosition)
@@ -298,11 +323,11 @@ export default function Home() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-slate-400 block mb-1">
+                  <label className="text-[10px] text-slate-400 block mb-1 uppercase">
                     Logo Pos
                   </label>
                   <select
-                    className="w-full text-xs border rounded p-1"
+                    className="w-full text-xs border border-slate-200 rounded p-1.5 bg-white text-slate-700"
                     value={logoPos}
                     onChange={(e) =>
                       setLogoPos(e.target.value as CornerPosition)
@@ -320,7 +345,7 @@ export default function Home() {
             {/* Generate Button */}
             <Button
               size="lg"
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-md"
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-md transition-all hover:shadow-lg"
               onClick={handleProcess}
               disabled={loading || !originalFile}
             >
@@ -342,9 +367,8 @@ export default function Home() {
         <div className="lg:col-span-2">
           <Card className="h-full border-slate-200 shadow-sm overflow-hidden flex flex-col">
             <CardContent className="p-0 flex-1 bg-[url('https://bg-remover-checkerboard.vercel.app/checkerboard.png')] bg-repeat flex items-center justify-center min-h-[500px] relative">
-              {/* Loading Overlay */}
               {loading && (
-                <div className="absolute inset-0 bg-white/90 z-20 flex flex-col items-center justify-center">
+                <div className="absolute inset-0 bg-white/90 z-20 flex flex-col items-center justify-center backdrop-blur-sm">
                   <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
                   <p className="text-lg font-medium text-slate-700">
                     Creating your masterpiece...
@@ -355,7 +379,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Result or Placeholder */}
               {processedPreview ? (
                 <img
                   src={processedPreview}
@@ -363,25 +386,25 @@ export default function Home() {
                   alt="Final Result"
                 />
               ) : (
-                <div className="text-center p-8 bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm">
+                <div className="text-center p-8 bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm max-w-sm mx-auto">
                   <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <ImagePlus className="w-8 h-8 text-slate-300" />
                   </div>
                   <h3 className="text-lg font-medium text-slate-900">
                     No Result Yet
                   </h3>
-                  <p className="text-slate-500">
-                    Upload an image and click generate to see the magic.
+                  <p className="text-slate-500 mt-2 text-sm leading-relaxed">
+                    Upload a product image on the left, set your price, and
+                    click "Generate Post" to see the magic happen.
                   </p>
                 </div>
               )}
             </CardContent>
 
-            {/* Download Footer */}
             <div className="p-4 border-t border-slate-100 bg-white flex justify-end">
               <Button
                 size="lg"
-                className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white"
+                className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white shadow-sm"
                 disabled={!processedPreview}
                 onClick={handleDownload}
               >

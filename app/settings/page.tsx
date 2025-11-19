@@ -1,12 +1,17 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { useSettings } from "../../hooks/useSettings";
+import { Button } from "../../components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
+import { Input } from "../../components/ui/input";
 import { ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
-import { CornerPosition } from "@/utils/processImage";
-import { useSettings } from "@/hooks/useSettings";
+import { CornerPosition } from "../../utils/processImage";
 
 export default function SettingsPage() {
   const { settings, updateSettings, isLoaded } = useSettings();

@@ -2,7 +2,6 @@ import { removeBackground, preload, Config } from "@imgly/background-removal";
 
 const config: Config = {
   debug: true,
-  // device: 'gpu',
   model: "isnet_quint8",
   output: {
     format: "image/png",
@@ -17,15 +16,12 @@ const config: Config = {
 
 export async function preloadModel() {
   try {
-    console.log("Preloading AI model...");
     await preload(config);
-    console.log("AI model preloaded successfully.");
   } catch (error) {
     console.error("Preloading failed:", error);
   }
 }
 
-// Define types for our new options
 export type CornerPosition =
   | "top-left"
   | "top-right"
@@ -37,6 +33,8 @@ export interface ProcessOptions {
   logoPosition?: CornerPosition;
   priceText?: string;
   pricePosition?: CornerPosition;
+  priceColor?: string; // Hex code for text
+  priceBgColor?: string; // Hex code for background box
 }
 
 export async function processImage(
@@ -61,7 +59,7 @@ export async function processImage(
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, targetSize, targetSize);
 
-    // 4. Draw Main Object (Centered)
+    // 4. Draw Main Object (Centered with padding)
     const scale = Math.min(
       (targetSize * 0.9) / imageBitmap.width,
       (targetSize * 0.9) / imageBitmap.height
@@ -72,8 +70,8 @@ export async function processImage(
     const y = (targetSize - newHeight) / 2;
     ctx.drawImage(imageBitmap, x, y, newWidth, newHeight);
 
-    // --- Helper to get coordinates for corners ---
-    const padding = 30; // Padding from the edge
+    // Helper to calculate corner coordinates
+    const padding = 40;
     const getCoords = (w: number, h: number, pos: CornerPosition) => {
       switch (pos) {
         case "top-left":
@@ -89,10 +87,9 @@ export async function processImage(
       }
     };
 
-    // 5. Draw Logo (if provided)
+    // 5. Draw Logo
     if (options.logoFile) {
       const logoBitmap = await createImageBitmap(options.logoFile);
-      // Resize logo to be reasonable (e.g., max 150px width/height)
       const logoMaxSize = 150;
       const logoScale = Math.min(
         logoMaxSize / logoBitmap.width,
@@ -105,45 +102,55 @@ export async function processImage(
       ctx.drawImage(logoBitmap, pos.x, pos.y, logoW, logoH);
     }
 
-    // 6. Draw Price Tag (if provided)
+    // 6. Draw Price Tag
     if (options.priceText) {
-      const fontSize = 48;
+      // Format Price Logic: Enforce "Rs XXXX/=" format
+      let displayText = options.priceText.trim();
+
+      // Remove existing non-numeric chars to normalize first (optional, but safer)
+      const numericValue = displayText.replace(/[^0-9.]/g, "");
+
+      if (numericValue) {
+        displayText = `Rs ${numericValue}/=`;
+      }
+
+      // Font settings
+      const fontSize = 56;
       ctx.font = `bold ${fontSize}px sans-serif`;
-      const text = options.priceText;
-      const metrics = ctx.measureText(text);
+      const metrics = ctx.measureText(displayText);
 
-      // Background for price (optional, makes it pop)
-      const bgPadding = 10;
+      // Background Box dimensions
+      const bgPadding = 16;
       const bgW = metrics.width + bgPadding * 2;
-      const bgH = fontSize + bgPadding * 2; // approx height
+      const bgH = fontSize + bgPadding * 2; // Approximation
 
-      // We need coordinates based on the BACKGROUND box size, not just text
       const pos = getCoords(bgW, bgH, options.pricePosition || "bottom-right");
 
-      // Draw Red/Black tag background
-      ctx.fillStyle = "#FF0000"; // Red tag
-      // Fixed typo here: removed 'ZF'
-      ctx.fillRect(pos.x, pos.y, bgW, bgH);
+      // Draw Background Box (Use custom color or default Red)
+      ctx.fillStyle = options.priceBgColor || "#E11D48";
+      ctx.beginPath();
+      ctx.roundRect(pos.x, pos.y, bgW, bgH, 12);
+      ctx.fill();
 
-      // Draw Text centered in that box
-      ctx.fillStyle = "#FFFFFF"; // White text
+      // Draw Text (Use custom color or default White)
+      ctx.fillStyle = options.priceColor || "#FFFFFF";
       ctx.textBaseline = "top";
-      ctx.fillText(text, pos.x + bgPadding, pos.y + bgPadding);
+      ctx.fillText(displayText, pos.x + bgPadding, pos.y + bgPadding + 4);
     }
 
-    // 7. Export
+    // 7. Export final composite
     return new Promise((resolve, reject) => {
       canvas.toBlob(
         (blob) => {
           if (blob) resolve(blob);
-          else reject(new Error("Canvas to Blob failed"));
+          else reject(new Error("Canvas export failed"));
         },
         "image/jpeg",
-        0.9
+        0.95
       );
     });
   } catch (error) {
-    console.warn("Optimized config failed, retrying with defaults...", error);
+    console.warn("Advanced processing failed, falling back...", error);
     return await removeBackground(imageFile);
   }
 }
